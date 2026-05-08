@@ -1,55 +1,132 @@
-const map = L.map('map').setView(
+// ==============================
+// GeoPath AI - Interactive Map
+// ==============================
+
+// Create Map
+const map = L.map('map', {
+
+    zoomControl: false,
+    preferCanvas: true
+
+}).setView(
     [22.9734, 78.6569],
     5
 );
 
+// ==============================
+// Dark AI Tile Layer
+// ==============================
+
 L.tileLayer(
-    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
     {
         attribution:
-            '&copy; OpenStreetMap contributors'
+        '&copy; OpenStreetMap & CartoDB',
+
+        subdomains: 'abcd',
+
+        maxZoom: 20
     }
 ).addTo(map);
+
+// Zoom Controls
+L.control.zoom({
+    position: 'bottomright'
+}).addTo(map);
+
+// ==============================
+// Variables
+// ==============================
 
 let cities = [];
 
 let graph = {};
 
-let routeLines = [];
+let highlightedRoutes = [];
+
+let selectedStart = null;
+
+let selectedEnd = null;
+
+// ==============================
+// Load Cities
+// ==============================
 
 function loadCities() {
-
-    resetMap();
 
     const locations = [
 
         ["Delhi", 28.6139, 77.2090],
+
         ["Mumbai", 19.0760, 72.8777],
+
         ["Kolkata", 22.5726, 88.3639],
+
         ["Chennai", 13.0827, 80.2707],
+
         ["Bangalore", 12.9716, 77.5946]
 
     ];
 
     locations.forEach(city => {
 
-        const marker = L.marker(
-            [city[1], city[2]]
+        const marker = L.circleMarker(
+
+            [city[1], city[2]],
+
+            {
+                radius: 12,
+
+                fillColor: "#38bdf8",
+
+                color: "#0f172a",
+
+                weight: 2,
+
+                opacity: 1,
+
+                fillOpacity: 1
+            }
+
         ).addTo(map);
 
         marker.bindPopup(city[0]);
 
+        // Click Event
+        marker.on("click", () => {
+
+            handleCitySelection(city[0]);
+
+        });
+
         cities.push({
+
             name: city[0],
+
             lat: city[1],
+
             lng: city[2]
+
         });
 
         graph[city[0]] = {};
     });
 
     connectCities();
+
+    document.getElementById(
+        "result"
+    ).innerHTML =
+
+    `
+    Click a city to select
+    starting location.
+    `;
 }
+
+// ==============================
+// Connect Cities
+// ==============================
 
 function connectCities() {
 
@@ -64,6 +141,10 @@ function connectCities() {
     connect("Bangalore", "Chennai", 3);
 }
 
+// ==============================
+// Connect Function
+// ==============================
+
 function connect(a, b, weight) {
 
     graph[a][b] = weight;
@@ -76,19 +157,72 @@ function connect(a, b, weight) {
     const cityB =
         cities.find(c => c.name === b);
 
-    const line = L.polyline(
+    // Base Route
+    L.polyline(
+
         [
             [cityA.lat, cityA.lng],
             [cityB.lat, cityB.lng]
         ],
-        {
-            color: "#64748b",
-            weight: 3
-        }
-    ).addTo(map);
 
-    routeLines.push(line);
+        {
+            color: "#334155",
+
+            weight: 3,
+
+            opacity: 0.7,
+
+            smoothFactor: 1.5
+        }
+
+    ).addTo(map);
 }
+
+// ==============================
+// Handle City Selection
+// ==============================
+
+function handleCitySelection(cityName){
+
+    // Select Start
+    if(!selectedStart){
+
+        selectedStart = cityName;
+
+        document.getElementById(
+            "result"
+        ).innerHTML =
+
+        `
+        <b>Start City:</b>
+        ${selectedStart}
+
+        <br><br>
+
+        Select destination city.
+        `;
+
+        return;
+    }
+
+    // Prevent same city
+    if(cityName === selectedStart){
+
+        return;
+    }
+
+    // Destination
+    selectedEnd = cityName;
+
+    runDijkstra(
+        selectedStart,
+        selectedEnd
+    );
+}
+
+// ==============================
+// Dijkstra Algorithm
+// ==============================
 
 function dijkstra(graph, start) {
 
@@ -116,11 +250,14 @@ function dijkstra(graph, start) {
             if (!visited[node]) {
 
                 if (
+
                     closestNode === null ||
 
                     distances[node] <
                     distances[closestNode]
+
                 ) {
+
                     closestNode = node;
                 }
             }
@@ -132,8 +269,10 @@ function dijkstra(graph, start) {
         visited[closestNode] = true;
 
         for (
+
             let neighbor
             in graph[closestNode]
+
         ) {
 
             let newDistance =
@@ -143,8 +282,10 @@ function dijkstra(graph, start) {
                 graph[closestNode][neighbor];
 
             if (
+
                 newDistance <
                 distances[neighbor]
+
             ) {
 
                 distances[neighbor] =
@@ -157,10 +298,15 @@ function dijkstra(graph, start) {
     }
 
     return {
+
         distances,
         previous
     };
 }
+
+// ==============================
+// Build Path
+// ==============================
 
 function getPath(previous, end) {
 
@@ -178,15 +324,19 @@ function getPath(previous, end) {
     return path;
 }
 
-function runDijkstra() {
+// ==============================
+// Run Dijkstra
+// ==============================
+
+function runDijkstra(start, end){
 
     const result =
-        dijkstra(graph, "Delhi");
+        dijkstra(graph, start);
 
     const path =
         getPath(
             result.previous,
-            "Chennai"
+            end
         );
 
     highlightPath(path);
@@ -195,20 +345,41 @@ function runDijkstra() {
         "result"
     ).innerHTML =
 
-        `
-        <b>Shortest Route:</b>
-        ${path.join(" → ")}
+    `
+    <b>Start:</b>
+    ${start}
 
-        <br><br>
+    <br><br>
 
-        <b>Total Distance:</b>
-        ${result.distances["Chennai"]}
-        `;
+    <b>Destination:</b>
+    ${end}
+
+    <br><br>
+
+    <b>Shortest Route:</b>
+    ${path.join(" → ")}
+
+    <br><br>
+
+    <b>Total Distance:</b>
+    ${result.distances[end]}
+    `;
 }
 
-function highlightPath(path) {
+// ==============================
+// Highlight Route
+// ==============================
 
-    for (let i = 0; i < path.length - 1; i++) {
+function highlightPath(path){
+
+    // Remove old route
+    highlightedRoutes.forEach(
+        line => map.removeLayer(line)
+    );
+
+    highlightedRoutes = [];
+
+    for(let i = 0; i < path.length - 1; i++){
 
         const cityA =
             cities.find(
@@ -220,33 +391,84 @@ function highlightPath(path) {
                 c => c.name === path[i + 1]
             );
 
-        L.polyline(
+        // Glow Layer
+        const glow = L.polyline(
+
             [
                 [cityA.lat, cityA.lng],
                 [cityB.lat, cityB.lng]
             ],
+
             {
-                color: "#22c55e",
-                weight: 6
+                color:"#00ffe5",
+
+                weight:12,
+
+                opacity:0.18,
+
+                smoothFactor:1.5
             }
+
         ).addTo(map);
+
+        // Main Route
+        const line = L.polyline(
+
+            [
+                [cityA.lat, cityA.lng],
+                [cityB.lat, cityB.lng]
+            ],
+
+            {
+                color:"#00ffe5",
+
+                weight:5,
+
+                opacity:1,
+
+                smoothFactor:1.5
+            }
+
+        ).addTo(map);
+
+        highlightedRoutes.push(glow);
+
+        highlightedRoutes.push(line);
     }
 }
 
-function resetMap() {
+// ==============================
+// Reset System
+// ==============================
 
-    map.eachLayer(layer => {
+function resetMap(){
 
-        if (
-            layer instanceof L.Marker ||
+    highlightedRoutes.forEach(
+        line => map.removeLayer(line)
+    );
 
-            layer instanceof L.Polyline
-        ) {
-            map.removeLayer(layer);
-        }
-    });
+    highlightedRoutes = [];
 
-    cities = [];
+    selectedStart = null;
 
-    graph = {};
+    selectedEnd = null;
+
+    document.getElementById(
+        "result"
+    ).innerHTML =
+
+    `
+    Click a city to select
+    starting location.
+    `;
 }
+
+// ==============================
+// Auto Load
+// ==============================
+
+window.onload = () => {
+
+    loadCities();
+
+};
